@@ -1,3 +1,4 @@
+# File: reconciliation_app/main.py
 
 import pandas as pd
 import streamlit as st
@@ -21,7 +22,10 @@ def preprocess_data(sales_data: pd.DataFrame, bank_data: pd.DataFrame) -> tuple[
     bank_data['Jumlah'] = bank_data['Jumlah'].astype(float)
     return sales_data, bank_data
 
-def reconcile(sales_data: pd.DataFrame, bank_data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def reconcile(sales_data: pd.DataFrame, bank_data: pd.DataFrame, customer_filter: str = "") -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    if customer_filter and 'Customer' in sales_data.columns:
+        sales_data = sales_data[sales_data['Customer'].str.contains(customer_filter, case=False, na=False)]
+
     matched = []
     unmatched_sales = sales_data.copy()
     unmatched_bank = bank_data.copy()
@@ -37,14 +41,15 @@ def reconcile(sales_data: pd.DataFrame, bank_data: pd.DataFrame) -> tuple[pd.Dat
         if not possible_matches.empty:
             matched_bank = possible_matches.iloc[0]
             matched.append({
-                'Invoice': sale['Invoice'],
+                'Invoice': sale.get('Invoice', ''),
+                'Customer': sale.get('Customer', ''),
                 'Sales_Date': sale['Tanggal'],
                 'Sales_Amount': sale['Jumlah'],
                 'Bank_Date': matched_bank['Tanggal'],
                 'Bank_Amount': matched_bank['Jumlah']
             })
 
-            unmatched_sales = unmatched_sales[unmatched_sales['Invoice'] != sale['Invoice']]
+            unmatched_sales = unmatched_sales[unmatched_sales.index != idx]
             unmatched_bank = unmatched_bank[unmatched_bank.index != matched_bank.name]
 
     matched_df = pd.DataFrame(matched)
@@ -65,11 +70,13 @@ st.sidebar.header("Upload Data")
 sales_file = st.sidebar.file_uploader("Upload file Data Penjualan (Excel)", type=["xlsx"])
 bank_file = st.sidebar.file_uploader("Upload file Data Rekening Koran (Excel)", type=["xlsx"])
 
+customer_filter = st.sidebar.text_input("Filter Customer (opsional)", value="")
+
 if sales_file and bank_file:
     sales_data, bank_data = load_data(sales_file, bank_file)
     sales_data, bank_data = preprocess_data(sales_data, bank_data)
 
-    matched, unmatched_sales, unmatched_bank = reconcile(sales_data, bank_data)
+    matched, unmatched_sales, unmatched_bank = reconcile(sales_data, bank_data, customer_filter)
 
     st.success("🎉 Rekonsiliasi Selesai!")
     st.subheader("Data Matched")
